@@ -35,7 +35,7 @@ export class MetronClient {
   constructor({
     token,
     baseUrl = DEFAULT_BASE_URL,
-    userAgent = 'shaligo/0.1 (+https://github.com/bpepple/shaligo)',
+    userAgent = 'shaligo/0.1 (+https://github.com/Metron-Project/shaligo)',
     autoThrottle = true,
     maxRetries = 3,
     // A zero-arg call falls through to the friendly runtime check below

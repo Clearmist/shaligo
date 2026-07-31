@@ -35,8 +35,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/bpepple/shaligo.git"
+    "url": "https://github.com/Metron-Project/shaligo.git"
   },
+  "bugs": {
+    "url": "https://github.com/Metron-Project/shaligo/issues"
+  },
+  "homepage": "https://github.com/Metron-Project/shaligo#readme",
   "devDependencies": {
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3"
