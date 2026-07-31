@@ -100,6 +100,10 @@ try {
 }
 ```
 
+## Documentation
+
+Full API reference can be found at [GitHub Pages](https://metron-project.github.io/shaligo/), generated with TypeDoc and published on each push to `main`.
+
 ## Development
 
 ```bash
