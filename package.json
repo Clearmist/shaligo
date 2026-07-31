@@ -4,11 +4,25 @@
   "description": "JavaScript API client for the Metron comic book database (metron.cloud)",
   "type": "module",
   "main": "index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./index.js"
+    }
   },
+  "files": [
+    "index.js",
+    "src",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:types": "tsc",
+    "docs": "typedoc",
+    "prepublishOnly": "npm run build:types && npm test"
   },
   "engines": {
     "node": ">=18"
@@ -22,5 +36,9 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/bpepple/shaligo.git"
+  },
+  "devDependencies": {
+    "typedoc": "^0.28.20",
+    "typescript": "^6.0.3"
   }
 }

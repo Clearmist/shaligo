@@ -3,19 +3,46 @@ import { RateLimitTracker } from './rateLimiter.js';
 import { buildResources } from './resources.js';
 import { sleep } from './util.js';
 
+/** @typedef {import('./rateLimiter.js').RateLimitStatus} RateLimitStatus */
+/** @typedef {import('./types.js').ArcApi} ArcApi */
+/** @typedef {import('./types.js').CharacterApi} CharacterApi */
+/** @typedef {import('./types.js').CreatorApi} CreatorApi */
+/** @typedef {import('./types.js').ImprintApi} ImprintApi */
+/** @typedef {import('./types.js').IssueApi} IssueApi */
+/** @typedef {import('./types.js').PublisherApi} PublisherApi */
+/** @typedef {import('./types.js').RoleApi} RoleApi */
+/** @typedef {import('./types.js').SeriesApi} SeriesApi */
+/** @typedef {import('./types.js').SeriesTypeApi} SeriesTypeApi */
+/** @typedef {import('./types.js').TeamApi} TeamApi */
+/** @typedef {import('./types.js').UniverseApi} UniverseApi */
+
 const DEFAULT_BASE_URL = 'https://metron.cloud';
+
+/**
+ * @typedef {object} MetronClientOptions
+ * @property {string} token - Knox API token, generated from your account settings at metron.cloud.
+ * @property {string} [baseUrl] - Override for testing against a different host.
+ * @property {string} [userAgent]
+ * @property {boolean} [autoThrottle] - Proactively pause before a request would exceed the tracked rate limit. Default true.
+ * @property {number} [maxRetries] - Max retries on a 429 response before throwing MetronRateLimitError. Default 3.
+ */
 
 // Client for the read-only (list/retrieve) surface of the Metron API,
 // authenticating with a Knox API token and honoring the rate-limit scheme
 // described at https://github.com/Metron-Project/metron/blob/master/api/RATELIMIT.md
 export class MetronClient {
+  /** @param {MetronClientOptions} options */
   constructor({
     token,
     baseUrl = DEFAULT_BASE_URL,
     userAgent = 'shaligo/0.1 (+https://github.com/bpepple/shaligo)',
     autoThrottle = true,
     maxRetries = 3,
-  } = {}) {
+    // A zero-arg call falls through to the friendly runtime check below
+    // rather than a native "cannot destructure" TypeError; `token` still
+    // shows as required in the published types, since that's the real
+    // contract for callers.
+  } = /** @type {MetronClientOptions} */ ({})) {
     if (!token) {
       throw new Error('MetronClient requires an API token (see constructor options)');
     }
@@ -27,29 +54,55 @@ export class MetronClient {
     this.maxRetries = maxRetries;
     this.rateLimiter = new RateLimitTracker();
 
-    Object.assign(this, buildResources(this));
+    const resources = buildResources(this);
+    this.arc = /** @type {ArcApi} */ (resources.arc);
+    this.character = /** @type {CharacterApi} */ (resources.character);
+    this.creator = /** @type {CreatorApi} */ (resources.creator);
+    this.imprint = /** @type {ImprintApi} */ (resources.imprint);
+    this.issue = /** @type {IssueApi} */ (resources.issue);
+    this.publisher = /** @type {PublisherApi} */ (resources.publisher);
+    this.role = /** @type {RoleApi} */ (resources.role);
+    this.series = /** @type {SeriesApi} */ (resources.series);
+    this.seriesType = /** @type {SeriesTypeApi} */ (resources.seriesType);
+    this.team = /** @type {TeamApi} */ (resources.team);
+    this.universe = /** @type {UniverseApi} */ (resources.universe);
   }
 
-  // Last known state of both rate-limit counters, as reported by the most
-  // recent response. Returns { burst, sustained }, each either null (no
-  // request made yet) or { limit, remaining, resetAt }.
+  /**
+   * Last known state of both rate-limit counters, as reported by the most
+   * recent response. Each counter is null until a request has been made.
+   * @returns {RateLimitStatus}
+   */
   getRateLimitStatus() {
     return { burst: this.rateLimiter.burst, sustained: this.rateLimiter.sustained };
   }
 
+  /**
+   * Issue a GET request against a Metron API path, e.g. `/api/series/`.
+   * Prefer the resource namespaces (`client.series.list(...)`, etc.) for
+   * the built-in endpoints; this is the low-level primitive they're built on.
+   * @param {string} path
+   * @param {Record<string, string|number|boolean|undefined|null>} [params]
+   * @returns {Promise<any>}
+   */
   request(path, params = {}) {
     const url = new URL(this.baseUrl + path);
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) {
-        url.searchParams.set(key, value);
+        url.searchParams.set(key, String(value));
       }
     }
     return this._requestUrl(url.toString());
   }
 
-  // Async generator yielding every result across all pages of a list
-  // endpoint, sleeping/retrying as needed between page requests so callers
-  // never have to think about the rate limit themselves.
+  /**
+   * Async generator yielding every result across all pages of a list
+   * endpoint, sleeping/retrying as needed between page requests so callers
+   * never have to think about the rate limit themselves.
+   * @param {string} path
+   * @param {Record<string, string|number|boolean|undefined|null>} [params]
+   * @returns {AsyncGenerator<any>}
+   */
   async *paginate(path, params = {}) {
     let nextUrl;
     let page = await this.request(path, params);
@@ -68,6 +121,11 @@ export class MetronClient {
   // value is the authoritative wait time; re-running the proactive check
   // on retry would double up against still-stale counter state and can
   // massively over-sleep, so retries go straight to another fetch.
+  /**
+   * @private
+   * @param {string} urlString
+   * @returns {Promise<any>}
+   */
   async _requestUrl(urlString) {
     await this._waitIfThrottled();
 
@@ -110,6 +168,7 @@ export class MetronClient {
     }
   }
 
+  /** @private */
   async _waitIfThrottled() {
     if (!this.autoThrottle) return;
     const wait = this.rateLimiter.msUntilAvailable();
@@ -120,6 +179,7 @@ export class MetronClient {
   }
 }
 
+/** @param {Response} response */
 async function safeParseBody(response) {
   try {
     return await response.clone().json();

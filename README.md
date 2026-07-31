@@ -1,6 +1,6 @@
 # shaligo
 
-A zero-dependency JavaScript client for the [Metron](https://metron.cloud) comic book database API, with automatic handling of Metron's [rate-limit scheme](https://github.com/Metron-Project/metron/blob/master/api/RATELIMIT.md).
+A zero-dependency JavaScript client for the [Metron](https://metron.cloud) comic book database API, with automatic handling of Metron's [rate-limit scheme](https://github.com/Metron-Project/metron/blob/master/api/RATELIMIT.md) and full TypeScript types.
 
 Covers the read-only (list/retrieve) surface of the API: `arc`, `character`, `creator`, `imprint`, `issue`, `publisher`, `role`, `series`, `seriesType`, `team`, `universe`, plus their nested sub-lists (`issue_list`, `series_list`). `credit` and `variant` are not included — the API only exposes create/update for those, no list or retrieve endpoints.
 
@@ -11,7 +11,19 @@ Covers the read-only (list/retrieve) surface of the API: `arc`, `character`, `cr
 
 ## Install
 
-This isn't published to npm; use it directly from the repo, e.g. as a git dependency or by copying it into your project.
+```bash
+npm install shaligo
+```
+
+The runtime is plain JavaScript (no build step for consumers); TypeScript types are published alongside it in `dist/*.d.ts` and picked up automatically.
+
+## Documentation
+
+Full API reference (every resource, method, and type) is generated from source with [TypeDoc](https://typedoc.org) and published at each push to `main`: see the "Deploy docs" GitHub Actions workflow. To build it locally:
+
+```bash
+npm run docs   # writes static HTML to docs/
+```
 
 ## Quick start
 
@@ -88,13 +100,15 @@ try {
 }
 ```
 
-## Testing
+## Development
 
 ```bash
-npm test
+npm test          # runs the suite (Node's built-in test runner + a local mock HTTP server, no real token needed)
+npm run build:types  # type-checks src/*.js against the JSDoc annotations and emits dist/*.d.ts
+npm run docs       # builds the TypeDoc reference site into docs/
 ```
 
-Runs the suite with Node's built-in test runner against a local mock HTTP server — no network access or real token required.
+Types are authored as JSDoc comments in `src/*.js` (see `src/types.js` for the response/param shapes) — there's no separate TypeScript source to keep in sync.
 
 ## License
 

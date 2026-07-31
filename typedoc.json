@@ -1,0 +1,14 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["index.js", "src/client.js", "src/errors.js", "src/rateLimiter.js", "src/types.js"],
+  "out": "docs",
+  "name": "shaligo",
+  "readme": "README.md",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "hideGenerator": true,
+  "navigation": {
+    "includeCategories": false,
+    "includeGroups": true
+  }
+}
