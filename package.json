@@ -1,0 +1,23 @@
+{
+  "name": "shaligo",
+  "version": "0.1.0",
+  "description": "JavaScript API client for the Metron comic book database (metron.cloud)",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "LGPL-2.1-only",
+  "keywords": [
+    "metron",
+    "comics",
+    "api-client"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bpepple/shaligo.git"
+  }
+}
