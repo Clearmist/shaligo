@@ -11,8 +11,8 @@
 
 /**
  * @typedef {object} RequestClient
- * @property {(path: string, params?: any) => Promise<any>} request
- * @property {(path: string, params?: any) => AsyncGenerator<any>} paginate
+ * @property {(path: string, params?: any, options?: import('./client.js').RequestOptions) => Promise<any>} request
+ * @property {(path: string, params?: any, options?: import('./client.js').RequestOptions) => AsyncGenerator<any>} paginate
  */
 
 /**
@@ -24,11 +24,11 @@
 function listResource(client, basePath, { retrieve = true } = {}) {
   /** @type {Record<string, any>} */
   const res = {
-    list: (params = {}) => client.request(basePath, params),
-    listAll: (params = {}) => client.paginate(basePath, params),
+    list: (params = {}, options = {}) => client.request(basePath, params, options),
+    listAll: (params = {}, options = {}) => client.paginate(basePath, params, options),
   };
   if (retrieve) {
-    res.get = (/** @type {number} */ id) => client.request(`${basePath}${id}/`);
+    res.get = (/** @type {number} */ id, options = {}) => client.request(`${basePath}${id}/`, {}, options);
   }
   return res;
 }
@@ -41,8 +41,8 @@ function listResource(client, basePath, { retrieve = true } = {}) {
  * @param {string} name
  */
 function attachSubList(res, client, basePath, subPath, name) {
-  res[name] = (/** @type {number} */ id, params = {}) => client.request(`${basePath}${id}/${subPath}/`, params);
-  res[`${name}All`] = (/** @type {number} */ id, params = {}) => client.paginate(`${basePath}${id}/${subPath}/`, params);
+  res[name] = (/** @type {number} */ id, params = {}, options = {}) => client.request(`${basePath}${id}/${subPath}/`, params, options);
+  res[`${name}All`] = (/** @type {number} */ id, params = {}, options = {}) => client.paginate(`${basePath}${id}/${subPath}/`, params, options);
 }
 
 /**

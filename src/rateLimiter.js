@@ -29,6 +29,20 @@ export class RateLimitTracker {
   }
 
   /**
+   * Restores previously-captured counters, e.g. from `getRateLimitStatus()`
+   * persisted somewhere and read back later. Lets a caller that can't keep a
+   * `MetronClient` instance alive between requests — a stateless server
+   * handler, most commonly — still get proactive throttling instead of
+   * discovering the limit by hitting it. `resetAt` may be a `Date` or an ISO
+   * string, since a round-trip through storage almost always serializes it.
+   * @param {RateLimitStatus} [status]
+   */
+  restore(status) {
+    this.burst = normalizeCounter(status?.burst);
+    this.sustained = normalizeCounter(status?.sustained);
+  }
+
+  /**
    * @param {Headers} headers
    * @param {'burst'|'sustained'} kind
    * @returns {RateLimitCounter|null}
@@ -68,4 +82,17 @@ export class RateLimitTracker {
     if (this.burst && this.burst.remaining <= 0) return 'burst';
     return undefined;
   }
+}
+
+/**
+ * @param {RateLimitCounter|null|undefined} counter
+ * @returns {RateLimitCounter|null}
+ */
+function normalizeCounter(counter) {
+  if (!counter) return null;
+  return {
+    limit: counter.limit,
+    remaining: counter.remaining,
+    resetAt: counter.resetAt instanceof Date ? counter.resetAt : new Date(counter.resetAt),
+  };
 }

@@ -91,3 +91,9 @@ test('sub-list *All() variants are async generators that paginate the sub path',
   for await (const item of client.arc.issueListAll(7)) items.push(item);
   assert.deepEqual(items, []);
 });
+
+test('get()/list()/sub-list methods forward `signal` down to the underlying request', async () => {
+  await assert.rejects(() => client.issue.get(42, { signal: AbortSignal.abort() }), { name: 'AbortError' });
+  await assert.rejects(() => client.issue.list({}, { signal: AbortSignal.abort() }), { name: 'AbortError' });
+  await assert.rejects(() => client.arc.issueList(7, {}, { signal: AbortSignal.abort() }), { name: 'AbortError' });
+});

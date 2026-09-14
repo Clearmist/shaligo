@@ -83,6 +83,49 @@ client.getRateLimitStatus();
 // => { burst: { limit, remaining, resetAt }, sustained: { limit, remaining, resetAt } }
 ```
 
+A proactive wait or a 429 retry can each take anywhere from a couple of seconds to several minutes, with nothing else observable happening in between. This applies no matter how long the client lives. Pass `onThrottle` to hook into it (for logging, a UI status message, etc.) instead of it looking like a hang:
+
+```js
+const client = new MetronClient({
+  token: process.env.METRON_TOKEN,
+  onThrottle: ({ reason, waitMs, limitType }) => {
+    console.warn(`waiting ${Math.round(waitMs / 1000)}s on the ${limitType} limit (${reason})`);
+  },
+});
+```
+
+### Short-lived clients
+
+If a single `MetronClient` can stay alive for the life of your process, the normal case for a long-running server, skip this section: `autoThrottle` already works because the client accumulates real rate-limit history over time.
+
+This section only matters when you can't rely on that: serverless functions (Lambda, Cloudflare Workers) may run each invocation on a different instance, or cold-start a fresh one with no memory of past requests, so anything you kept in a module-level variable isn't guaranteed to still be there next time. The same problem shows up in any code that constructs a new `MetronClient` per request instead of reusing one.
+
+A fresh client always starts blind. With no rate-limit history of its own, `autoThrottle` can't act until its *own* first response, so it discovers an already-exhausted limit by hitting it, the same as if `autoThrottle` were off. The fix is to persist `getRateLimitStatus()` somewhere that *does* survive between invocations (a cache, a database row) and pass it back in as `rateLimitStatus` next time:
+
+```js
+const status = await loadPersistedRateLimitStatus(); // however you stored the last getRateLimitStatus()
+const client = new MetronClient({ token: process.env.METRON_TOKEN, rateLimitStatus: status });
+
+await client.series.get(8477);
+await savePersistedRateLimitStatus(client.getRateLimitStatus());
+```
+
+`resetAt` round-trips fine as either a `Date` or the ISO string you get back from `JSON.stringify`.
+
+### Cancelling a request
+
+Every method that talks to the network (`request()`, `paginate()`, and every resource's `list()`/`get()`/`*List()`/`*All()`) takes an `AbortSignal` as its last argument. This cancels the underlying `fetch`, but just as importantly it also cuts short a proactive throttle wait or a 429 retry wait, either of which can otherwise run for minutes:
+
+```js
+const controller = new AbortController();
+const promise = client.issue.get(2345, { signal: controller.signal });
+
+// e.g. the caller gave up, or a client disconnected:
+controller.abort();
+
+await promise; // rejects with an AbortError
+```
+
 ## Errors
 
 - `MetronApiError` — thrown for any non-2xx response; has `status`, `body`, and `url`.

@@ -144,6 +144,43 @@ test('proactively waits for the counter reset before the next request', async ()
   assert.ok(elapsed >= 1700, `expected a multi-second proactive wait, got ${elapsed}ms`);
 });
 
+test('rateLimitStatus seeds the tracker so a fresh client can throttle proactively', async () => {
+  const client = new MetronClient({
+    token: 't',
+    baseUrl: ctx.baseUrl,
+    rateLimitStatus: { burst: { limit: 20, remaining: 0, resetAt: new Date(Date.now() + 1500) }, sustained: null },
+  });
+  assert.deepEqual(client.getRateLimitStatus().burst.remaining, 0);
+  const start = Date.now();
+  await client.request('/api/retrieve/5/');
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed >= 1000, `expected the seeded counter to trigger a proactive wait, got ${elapsed}ms`);
+});
+
+test('onThrottle fires with reason "retry" when a request itself gets a 429', async () => {
+  const calls = [];
+  const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl, onThrottle: (info) => calls.push(info) });
+  flakyCalls = 0;
+  await client.request('/api/flaky/');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].reason, 'retry');
+  assert.equal(calls[0].attempt, 0);
+  assert.equal(calls[0].limitType, 'burst');
+  assert.ok(calls[0].waitMs >= 900, `expected ~1s waitMs, got ${calls[0].waitMs}`);
+  assert.ok(calls[0].url.includes('/api/flaky/'));
+});
+
+test('onThrottle fires with reason "proactive" before a request that would exceed a known-exhausted counter', async () => {
+  const calls = [];
+  const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl, onThrottle: (info) => calls.push(info) });
+  await client.request('/api/exhausted/', { resetIn: 2 });
+  await client.request('/api/retrieve/5/');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].reason, 'proactive');
+  assert.equal(calls[0].limitType, 'burst');
+  assert.ok(calls[0].url.includes('/api/retrieve/5/'));
+});
+
 test('autoThrottle: false skips the proactive wait', async () => {
   const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl, autoThrottle: false });
   await client.request('/api/exhausted/');
@@ -151,6 +188,33 @@ test('autoThrottle: false skips the proactive wait', async () => {
   await client.request('/api/retrieve/5/');
   const elapsed = Date.now() - start;
   assert.ok(elapsed < 500, `expected no proactive wait, got ${elapsed}ms`);
+});
+
+test('an already-aborted signal rejects request() without waiting on anything', async () => {
+  const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl });
+  await assert.rejects(() => client.request('/api/retrieve/5/', {}, { signal: AbortSignal.abort() }), { name: 'AbortError' });
+});
+
+test('signal aborts a request stuck in a 429 retry wait, well before Retry-After elapses', async () => {
+  const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl });
+  always429Calls = 0;
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 100);
+  const start = Date.now();
+  await assert.rejects(() => client.request('/api/always429/', {}, { signal: controller.signal }), { name: 'AbortError' });
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 900, `expected the abort to cut the 1s retry wait short, got ${elapsed}ms`);
+});
+
+test('signal aborts a request stuck in a proactive throttle wait, well before the counter resets', async () => {
+  const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl });
+  await client.request('/api/exhausted/', { resetIn: 3 });
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 100);
+  const start = Date.now();
+  await assert.rejects(() => client.request('/api/retrieve/5/', {}, { signal: controller.signal }), { name: 'AbortError' });
+  const elapsed = Date.now() - start;
+  assert.ok(elapsed < 1000, `expected the abort to cut the multi-second proactive wait short, got ${elapsed}ms`);
 });
 
 test('non-2xx responses throw MetronApiError with status and body', async () => {

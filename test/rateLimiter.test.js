@@ -78,6 +78,31 @@ test('msUntilAvailable() is 0 once the reset instant has already passed', () => 
   assert.equal(tracker.msUntilAvailable(now), 0);
 });
 
+test('restore() seeds both counters from a previously-captured status', () => {
+  const tracker = new RateLimitTracker();
+  const resetAt = new Date(Date.now() + 60_000);
+  tracker.restore({ burst: { limit: 20, remaining: 0, resetAt }, sustained: { limit: 5000, remaining: 4999, resetAt } });
+  assert.deepEqual(tracker.burst, { limit: 20, remaining: 0, resetAt });
+  assert.equal(tracker.sustained.remaining, 4999);
+});
+
+test('restore() accepts a serialized (string) resetAt, e.g. read back from storage as JSON', () => {
+  const tracker = new RateLimitTracker();
+  const resetAt = new Date(Date.now() + 60_000);
+  tracker.restore({ burst: { limit: 20, remaining: 0, resetAt: resetAt.toISOString() }, sustained: null });
+  assert.ok(tracker.burst.resetAt instanceof Date);
+  assert.equal(tracker.burst.resetAt.getTime(), resetAt.getTime());
+  assert.equal(tracker.sustained, null);
+});
+
+test('restore() with no argument clears both counters', () => {
+  const tracker = new RateLimitTracker();
+  tracker.update(headers());
+  tracker.restore();
+  assert.equal(tracker.burst, null);
+  assert.equal(tracker.sustained, null);
+});
+
 test('exhaustedLimitType() reports which counter is at zero', () => {
   const tracker = new RateLimitTracker();
   assert.equal(tracker.exhaustedLimitType(), undefined);

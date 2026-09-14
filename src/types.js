@@ -423,26 +423,28 @@
 
 // -- Generic resource shapes, instantiated per-resource in resources.js ----
 
+/** @typedef {import('./client.js').RequestOptions} RequestOptions */
+
 /**
  * @template TSummary
  * @template TDetail
  * @template TParams
  * @typedef {object} ListResource
- * @property {(params?: TParams) => Promise<Paginated<TSummary>>} list - Fetch a single page.
- * @property {(params?: TParams) => AsyncGenerator<TSummary>} listAll - Iterate every result across all pages.
- * @property {(id: number) => Promise<TDetail>} get - Fetch a single record by ID.
+ * @property {(params?: TParams, options?: RequestOptions) => Promise<Paginated<TSummary>>} list - Fetch a single page.
+ * @property {(params?: TParams, options?: RequestOptions) => AsyncGenerator<TSummary>} listAll - Iterate every result across all pages.
+ * @property {(id: number, options?: RequestOptions) => Promise<TDetail>} get - Fetch a single record by ID.
  */
 
-/** @typedef {ListResource<ArcSummary, ArcDetail, ArcParams> & {issueList: (id: number, params?: PageParams) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams) => AsyncGenerator<IssueSummary>}} ArcApi */
-/** @typedef {ListResource<CharacterSummary, CharacterDetail, CharacterParams> & {issueList: (id: number, params?: PageParams) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams) => AsyncGenerator<IssueSummary>}} CharacterApi */
+/** @typedef {ListResource<ArcSummary, ArcDetail, ArcParams> & {issueList: (id: number, params?: PageParams, options?: RequestOptions) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams, options?: RequestOptions) => AsyncGenerator<IssueSummary>}} ArcApi */
+/** @typedef {ListResource<CharacterSummary, CharacterDetail, CharacterParams> & {issueList: (id: number, params?: PageParams, options?: RequestOptions) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams, options?: RequestOptions) => AsyncGenerator<IssueSummary>}} CharacterApi */
 /** @typedef {ListResource<CreatorSummary, CreatorDetail, CreatorParams>} CreatorApi */
 /** @typedef {ListResource<ImprintSummary, ImprintDetail, ImprintParams>} ImprintApi */
 /** @typedef {ListResource<IssueSummary, IssueDetail, IssueParams>} IssueApi */
-/** @typedef {ListResource<PublisherSummary, PublisherDetail, PublisherParams> & {seriesList: (id: number, params?: PageParams) => Promise<Paginated<SeriesSummary>>, seriesListAll: (id: number, params?: PageParams) => AsyncGenerator<SeriesSummary>}} PublisherApi */
-/** @typedef {{list: (params?: RoleParams) => Promise<Paginated<RoleSummary>>, listAll: (params?: RoleParams) => AsyncGenerator<RoleSummary>}} RoleApi */
-/** @typedef {ListResource<SeriesSummary, SeriesDetail, SeriesParams> & {issueList: (id: number, params?: PageParams) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams) => AsyncGenerator<IssueSummary>}} SeriesApi */
-/** @typedef {{list: (params?: SeriesTypeParams) => Promise<Paginated<SeriesTypeSummary>>, listAll: (params?: SeriesTypeParams) => AsyncGenerator<SeriesTypeSummary>}} SeriesTypeApi */
-/** @typedef {ListResource<TeamSummary, TeamDetail, TeamParams> & {issueList: (id: number, params?: PageParams) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams) => AsyncGenerator<IssueSummary>}} TeamApi */
+/** @typedef {ListResource<PublisherSummary, PublisherDetail, PublisherParams> & {seriesList: (id: number, params?: PageParams, options?: RequestOptions) => Promise<Paginated<SeriesSummary>>, seriesListAll: (id: number, params?: PageParams, options?: RequestOptions) => AsyncGenerator<SeriesSummary>}} PublisherApi */
+/** @typedef {{list: (params?: RoleParams, options?: RequestOptions) => Promise<Paginated<RoleSummary>>, listAll: (params?: RoleParams, options?: RequestOptions) => AsyncGenerator<RoleSummary>}} RoleApi */
+/** @typedef {ListResource<SeriesSummary, SeriesDetail, SeriesParams> & {issueList: (id: number, params?: PageParams, options?: RequestOptions) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams, options?: RequestOptions) => AsyncGenerator<IssueSummary>}} SeriesApi */
+/** @typedef {{list: (params?: SeriesTypeParams, options?: RequestOptions) => Promise<Paginated<SeriesTypeSummary>>, listAll: (params?: SeriesTypeParams, options?: RequestOptions) => AsyncGenerator<SeriesTypeSummary>}} SeriesTypeApi */
+/** @typedef {ListResource<TeamSummary, TeamDetail, TeamParams> & {issueList: (id: number, params?: PageParams, options?: RequestOptions) => Promise<Paginated<IssueSummary>>, issueListAll: (id: number, params?: PageParams, options?: RequestOptions) => AsyncGenerator<IssueSummary>}} TeamApi */
 /** @typedef {ListResource<UniverseSummary, UniverseDetail, UniverseParams>} UniverseApi */
 
 export {};

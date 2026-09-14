@@ -19,12 +19,29 @@ import { sleep } from './util.js';
 const DEFAULT_BASE_URL = 'https://metron.cloud';
 
 /**
+ * @typedef {object} RequestOptions
+ * @property {AbortSignal} [signal] - Aborts the in-flight `fetch`, or a pending proactive/retry wait, with the same `AbortError` `fetch` itself throws. Passed down from every resource method (`client.issue.get(id, { signal })`, etc.) and from `request()`/`paginate()` directly.
+ */
+
+/**
+ * @callback OnThrottleCallback
+ * @param {object} info
+ * @param {'proactive'|'retry'} info.reason - `'proactive'` when a prior response already showed the limit exhausted and this wait happens before the request is even sent; `'retry'` when this request itself just got a 429.
+ * @param {number} info.waitMs - How long the client is about to sleep.
+ * @param {string} info.url - The request URL being waited on.
+ * @param {number} [info.attempt] - The retry attempt number that got the 429; only present for `reason: 'retry'`.
+ * @param {'burst'|'sustained'} [info.limitType] - Which counter is driving the wait, when known.
+ */
+
+/**
  * @typedef {object} MetronClientOptions
  * @property {string} token - Knox API token, generated from your account settings at metron.cloud.
  * @property {string} [baseUrl] - Override for testing against a different host.
  * @property {string} [userAgent]
  * @property {boolean} [autoThrottle] - Proactively pause before a request would exceed the tracked rate limit. Default true.
  * @property {number} [maxRetries] - Max retries on a 429 response before throwing MetronRateLimitError. Default 3.
+ * @property {RateLimitStatus} [rateLimitStatus] - Previously-captured counters (from `getRateLimitStatus()`) to seed this client with. A fresh client otherwise starts with no rate-limit history, so `autoThrottle` can't help until its first response — this lets a caller that creates a short-lived `MetronClient` per request (rather than keeping one alive) persist the counters between calls and still throttle proactively instead of finding the limit by hitting it.
+ * @property {OnThrottleCallback} [onThrottle] - Called immediately before the client sleeps for a rate limit, proactively or after a 429. A wait like this can run from seconds to minutes with nothing else observable happening — this is the hook for logging/UI feedback so it doesn't look indistinguishable from a hang.
  */
 
 // Client for the read-only (list/retrieve) surface of the Metron API,
@@ -38,6 +55,8 @@ export class MetronClient {
     userAgent = 'shaligo/1.0 (+https://github.com/Metron-Project/shaligo)',
     autoThrottle = true,
     maxRetries = 3,
+    rateLimitStatus,
+    onThrottle,
     // A zero-arg call falls through to the friendly runtime check below
     // rather than a native "cannot destructure" TypeError; `token` still
     // shows as required in the published types, since that's the real
@@ -52,7 +71,11 @@ export class MetronClient {
     this.userAgent = userAgent;
     this.autoThrottle = autoThrottle;
     this.maxRetries = maxRetries;
+    this.onThrottle = onThrottle;
     this.rateLimiter = new RateLimitTracker();
+    if (rateLimitStatus) {
+      this.rateLimiter.restore(rateLimitStatus);
+    }
 
     const resources = buildResources(this);
     this.arc = /** @type {ArcApi} */ (resources.arc);
@@ -83,16 +106,17 @@ export class MetronClient {
    * the built-in endpoints; this is the low-level primitive they're built on.
    * @param {string} path
    * @param {Record<string, string|number|boolean|undefined|null>} [params]
+   * @param {RequestOptions} [options]
    * @returns {Promise<any>}
    */
-  request(path, params = {}) {
+  request(path, params = {}, options = {}) {
     const url = new URL(this.baseUrl + path);
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null) {
         url.searchParams.set(key, String(value));
       }
     }
-    return this._requestUrl(url.toString());
+    return this._requestUrl(url.toString(), options);
   }
 
   /**
@@ -101,16 +125,17 @@ export class MetronClient {
    * never have to think about the rate limit themselves.
    * @param {string} path
    * @param {Record<string, string|number|boolean|undefined|null>} [params]
+   * @param {RequestOptions} [options]
    * @returns {AsyncGenerator<any>}
    */
-  async *paginate(path, params = {}) {
+  async *paginate(path, params = {}, options = {}) {
     let nextUrl;
-    let page = await this.request(path, params);
+    let page = await this.request(path, params, options);
     for (const item of page.results ?? []) yield item;
     nextUrl = page.next;
 
     while (nextUrl) {
-      page = await this._requestUrl(nextUrl);
+      page = await this._requestUrl(nextUrl, options);
       for (const item of page.results ?? []) yield item;
       nextUrl = page.next;
     }
@@ -124,10 +149,12 @@ export class MetronClient {
   /**
    * @private
    * @param {string} urlString
+   * @param {RequestOptions} [options]
    * @returns {Promise<any>}
    */
-  async _requestUrl(urlString) {
-    await this._waitIfThrottled();
+  async _requestUrl(urlString, options = {}) {
+    const { signal } = options;
+    await this._waitIfThrottled(urlString, signal);
 
     for (let attempt = 0; ; attempt += 1) {
       const response = await fetch(urlString, {
@@ -136,6 +163,7 @@ export class MetronClient {
           Accept: 'application/json',
           'User-Agent': this.userAgent,
         },
+        signal,
       });
 
       this.rateLimiter.update(response.headers);
@@ -152,7 +180,9 @@ export class MetronClient {
           });
         }
         const retryAfterSeconds = Number(response.headers.get('retry-after')) || 1;
-        await sleep(retryAfterSeconds * 1000);
+        const waitMs = retryAfterSeconds * 1000;
+        this.onThrottle?.({ reason: 'retry', waitMs, url: urlString, attempt, limitType: this.rateLimiter.exhaustedLimitType() });
+        await sleep(waitMs, signal);
         continue;
       }
 
@@ -168,13 +198,19 @@ export class MetronClient {
     }
   }
 
-  /** @private */
-  async _waitIfThrottled() {
+  /**
+   * @private
+   * @param {string} urlString
+   * @param {AbortSignal} [signal]
+   */
+  async _waitIfThrottled(urlString, signal) {
     if (!this.autoThrottle) return;
     const wait = this.rateLimiter.msUntilAvailable();
     if (wait > 0) {
       // Small buffer past the reset instant to avoid clock-skew edge cases.
-      await sleep(wait + 250);
+      const waitMs = wait + 250;
+      this.onThrottle?.({ reason: 'proactive', waitMs, url: urlString, limitType: this.rateLimiter.exhaustedLimitType() });
+      await sleep(waitMs, signal);
     }
   }
 }
