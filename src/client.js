@@ -34,6 +34,15 @@ const DEFAULT_BASE_URL = 'https://metron.cloud';
  */
 
 /**
+ * @callback OnResponseCallback
+ * @param {object} info
+ * @param {string} info.url - The full URL that was requested (including query string).
+ * @param {Response} info.response - The raw `fetch` response, as a clone: its body is still unread, so the callback can call `.json()`/`.text()` and inspect `.headers`/`.status` without affecting the client. Fired for every response received, including 429s that get retried and non-2xx errors.
+ * @param {number} info.attempt - Zero-based attempt number for this request (increments on 429 retries).
+ * @returns {void|Promise<void>}
+ */
+
+/**
  * @typedef {object} MetronClientOptions
  * @property {string} token - Knox API token, generated from your account settings at metron.cloud.
  * @property {string} [baseUrl] - Override for testing against a different host.
@@ -42,6 +51,7 @@ const DEFAULT_BASE_URL = 'https://metron.cloud';
  * @property {number} [maxRetries] - Max retries on a 429 response before throwing MetronRateLimitError. Default 3.
  * @property {RateLimitStatus} [rateLimitStatus] - Previously-captured counters (from `getRateLimitStatus()`) to seed this client with. A fresh client otherwise starts with no rate-limit history, so `autoThrottle` can't help until its first response — this lets a caller that creates a short-lived `MetronClient` per request (rather than keeping one alive) persist the counters between calls and still throttle proactively instead of finding the limit by hitting it.
  * @property {OnThrottleCallback} [onThrottle] - Called immediately before the client sleeps for a rate limit, proactively or after a 429. A wait like this can run from seconds to minutes with nothing else observable happening — this is the hook for logging/UI feedback so it doesn't look indistinguishable from a hang.
+ * @property {OnResponseCallback} [onResponse] - Called with the requested URL and the raw response for every response received, before the client processes it. The way for a parent app to log or capture exactly which endpoint was hit and what came back. May be async; the client awaits it, and if it throws, the request fails with that error.
  */
 
 // Client for the read-only (list/retrieve) surface of the Metron API,
@@ -57,6 +67,7 @@ export class MetronClient {
     maxRetries = 3,
     rateLimitStatus,
     onThrottle,
+    onResponse,
     // A zero-arg call falls through to the friendly runtime check below
     // rather than a native "cannot destructure" TypeError; `token` still
     // shows as required in the published types, since that's the real
@@ -72,6 +83,7 @@ export class MetronClient {
     this.autoThrottle = autoThrottle;
     this.maxRetries = maxRetries;
     this.onThrottle = onThrottle;
+    this.onResponse = onResponse;
     this.rateLimiter = new RateLimitTracker();
     if (rateLimitStatus) {
       this.rateLimiter.restore(rateLimitStatus);
@@ -167,6 +179,9 @@ export class MetronClient {
       });
 
       this.rateLimiter.update(response.headers);
+      if (this.onResponse) {
+        await this.onResponse({ url: urlString, response: response.clone(), attempt });
+      }
 
       if (response.status === 429) {
         if (attempt >= this.maxRetries) {

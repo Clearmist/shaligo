@@ -94,6 +94,19 @@ const client = new MetronClient({
 });
 ```
 
+### Inspecting requests and raw responses
+
+Pass `onResponse` to see the exact URL requested and the raw `fetch` `Response` for every request the client makes, including paginated follow-ups. The response is a clone, so reading its body doesn't interfere with the client. It also fires for 429s that get retried and for non-2xx responses (`attempt` is zero-based and increments on retries):
+
+```js
+const client = new MetronClient({
+  token: process.env.METRON_TOKEN,
+  onResponse: async ({ url, response, attempt }) => {
+    log.debug({ url, status: response.status, attempt, raw: await response.text() });
+  },
+});
+```
+
 ### Short-lived clients
 
 If a single `MetronClient` can stay alive for the life of your process, the normal case for a long-running server, skip this section: `autoThrottle` already works because the client accumulates real rate-limit history over time.

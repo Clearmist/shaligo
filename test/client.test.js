@@ -181,6 +181,31 @@ test('onThrottle fires with reason "proactive" before a request that would excee
   assert.ok(calls[0].url.includes('/api/retrieve/5/'));
 });
 
+test('onResponse receives the requested URL and a readable raw response', async () => {
+  const calls = [];
+  const client = new MetronClient({
+    token: 't',
+    baseUrl: ctx.baseUrl,
+    onResponse: async ({ url, response, attempt }) => {
+      calls.push({ url, status: response.status, attempt, raw: await response.text() });
+    },
+  });
+  const body = await client.request('/api/retrieve/5/', { foo: 'bar' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, `${ctx.baseUrl}/api/retrieve/5/?foo=bar`);
+  assert.equal(calls[0].status, 200);
+  assert.equal(calls[0].attempt, 0);
+  assert.deepEqual(JSON.parse(calls[0].raw), body);
+});
+
+test('onResponse also fires for each 429 retry attempt', async () => {
+  const attempts = [];
+  const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl, onResponse: ({ response, attempt }) => attempts.push([response.status, attempt]) });
+  flakyCalls = 0;
+  await client.request('/api/flaky/');
+  assert.deepEqual(attempts, [[429, 0], [200, 1]]);
+});
+
 test('autoThrottle: false skips the proactive wait', async () => {
   const client = new MetronClient({ token: 't', baseUrl: ctx.baseUrl, autoThrottle: false });
   await client.request('/api/exhausted/');
